@@ -103,7 +103,7 @@ Each query is normalised to a **template** (literals → `?`, comments stripped,
 
 Because the logger sits **after** PHP has URL-decoded the input, HTTP-level evasion (case tricks, `%55NION`, comment splitting) is undone before the detector sees the SQL — one argument for database-side detection worth discussing in your paper.
 
-## 5. Design decisions to state in your methodology
+## 5. Design decisions to state in methodology
 
 - **Continuous** = the detector tails the log and scores each event as it lands (≈50 ms poll) and commits each event immediately. It is out-of-band, so it competes for CPU with WordPress but doesn't block requests. If you want a stricter "inline" variant, add a blocking `curl` (50 ms timeout) from the mu-plugin to a local scoring endpoint; that is the natural third condition.
 - **Scheduled** = the same code run in one batch every N seconds, one SQLite transaction per batch. Expect lower average overhead, CPU spikes at each batch, and detection delay ≈ N/2 on average.
@@ -120,4 +120,4 @@ Because the logger sits **after** PHP has URL-decoded the input, HTTP-level evas
 
 ## 7. Testing status
 
-The Python components were exercised end to end on synthetic logs (train → continuous and scheduled runs → evaluation) and the workload generator against a stub HTTP server. The PHP files and `setup_vm.sh` couldn't be run in that environment, so expect to fix a small typo or package name on your first VM run. Perfect scores on synthetic data mean nothing; real numbers come from your VM runs.
+The Python components were exercised end to end on synthetic logs (train → continuous and scheduled runs → evaluation) and the workload generator against a stub HTTP server. All test results are in final_results.csv file for 5 runs each with both 10-minutes continuous and scheduled monitoring. Results.cvs is the test run result which look out if the python scripts are working as intended or not and the site is responding. All runs are automated with the run_trials.sh.
