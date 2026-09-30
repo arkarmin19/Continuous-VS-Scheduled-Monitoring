@@ -1,2 +1,2 @@
 # Continuous-VS-Scheduled-Monitoring
-Research project
+This is a student project for university course.
