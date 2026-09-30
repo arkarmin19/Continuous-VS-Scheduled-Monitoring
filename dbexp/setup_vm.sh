@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lab setup for Ubuntu 22.04 / 24.04 (Oracle Cloud Always Free, GCP e2-micro, AWS free tier...).
+
 #
 #   SITE_URL=http://<vm-public-ip> bash setup_vm.sh
 #
