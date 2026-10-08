@@ -23,6 +23,8 @@ import argparse
 import base64
 import os
 import random
+import re
+import sys
 import threading
 import time
 
@@ -53,6 +55,38 @@ FAKE_FORM = ('<h2>Verify your account</h2><form method="post" action="https://ex
              '<button>Sign in</button></form>')
 
 
+# REST calls use the "?rest_route=" form, which works with WordPress's default "plain"
+# permalinks. The "/wp-json/..." form needs pretty permalinks + Apache mod_rewrite, which
+# setup_vm.sh does not enable - so those requests got an Apache 404 and never reached WordPress.
+_ROUTE = re.compile(r"[?&]rest_route=([^&]+)")
+_ID = re.compile(r"/\d+(?=/|$)")
+
+
+def log_path(path):
+    """Path stored in http_requests: REST route with ids collapsed, e.g. /wp-json/wp/v2/posts/{id}."""
+    m = _ROUTE.search(path)
+    if m:
+        return "/wp-json" + _ID.sub("/{id}", m.group(1))
+    return path.split("?")[0]
+
+
+def preflight():
+    """Fail fast if anonymous pages or the authenticated REST API are not working."""
+    problems = []
+    try:
+        r = requests.get(WP_URL + "/", headers={"X-Exp-Label": "ignore"}, timeout=15)
+        if r.status_code != 200:
+            problems.append(f"GET / returned HTTP {r.status_code}")
+        r = requests.get(WP_URL + "/?rest_route=/wp/v2/users/me", headers={"X-Exp-Label": "ignore"},
+                         auth=ADMIN, timeout=15)
+        if r.status_code != 200:
+            problems.append(f"authenticated REST call returned HTTP {r.status_code} "
+                            f"(401 = bad WP_ADMIN_APP_PW, 404 = REST API unreachable)")
+    except Exception as e:                                       # noqa: BLE001
+        problems.append(f"site unreachable: {e}")
+    return problems
+
+
 def rtext(n):
     return " ".join(random.choices(WORDS, k=n))
 
@@ -68,11 +102,13 @@ class Client:
             resp = self.s.request(method, WP_URL + path, headers={"X-Exp-Label": label},
                                   auth=auth, timeout=30, **kw)
             status = resp.status_code
+            if status >= 400:
+                err = f"HTTP {status}"
         except Exception as e:                                   # noqa: BLE001
             err = str(e)[:200]
         ms = (time.perf_counter() - t0) * 1000
         with self.lock:
-            self.sink.append((self.run_id, time.time(), label, method, path.split("?")[0],
+            self.sink.append((self.run_id, time.time(), label, method, log_path(path),
                               status, ms, err))
         return resp
 
@@ -83,7 +119,7 @@ class Client:
     def page(self):      self.call("GET", "/", params={"page_id": 2})
     def category(self):  self.call("GET", "/", params={"cat": 1})
     def feed(self):      self.call("GET", "/feed/")
-    def rest_posts(self): self.call("GET", "/wp-json/wp/v2/posts", params={"per_page": 5})
+    def rest_posts(self): self.call("GET", "/?rest_route=/wp/v2/posts", params={"per_page": 5})
     def lab_lookup(self): self.call("GET", "/", params={"dbexp_id": random.randint(1, 5)})
 
     def comment(self):
@@ -93,17 +129,17 @@ class Client:
 
     # ---------------- benign: administrator ----------------
     def admin_cycle(self):
-        r = self.call("POST", "/wp-json/wp/v2/posts", auth=ADMIN,
+        r = self.call("POST", "/?rest_route=/wp/v2/posts", auth=ADMIN,
                       json={"title": rtext(3), "content": rtext(30), "status": "publish"})
         if r is not None and r.status_code in (200, 201):
             pid = r.json()["id"]
-            self.call("POST", f"/wp-json/wp/v2/posts/{pid}", auth=ADMIN, json={"content": rtext(40)})
+            self.call("POST", f"/?rest_route=/wp/v2/posts/{pid}", auth=ADMIN, json={"content": rtext(40)})
             self.call("GET", "/", params={"p": pid})
-            self.call("DELETE", f"/wp-json/wp/v2/posts/{pid}", auth=ADMIN, params={"force": "true"})
+            self.call("DELETE", f"/?rest_route=/wp/v2/posts/{pid}", auth=ADMIN, params={"force": "true"})
 
     def admin_browse(self):
-        self.call("GET", "/wp-json/wp/v2/posts", auth=ADMIN, params={"context": "edit", "per_page": 10})
-        self.call("GET", "/wp-json/wp/v2/users/me", auth=ADMIN)
+        self.call("GET", "/?rest_route=/wp/v2/posts", auth=ADMIN, params={"context": "edit", "per_page": 10})
+        self.call("GET", "/?rest_route=/wp/v2/users/me", auth=ADMIN)
 
     # ---------------- attacks ----------------
     def sqli(self, evasive, idx):
@@ -114,22 +150,22 @@ class Client:
     def phish_episode(self, k):
         L = "attack:phish-kit"
         blob = base64.b64encode(os.urandom(128)).decode()
-        page = self.call("POST", "/wp-json/wp/v2/pages", L, ADMIN,
+        page = self.call("POST", "/?rest_route=/wp/v2/pages", L, ADMIN,
                          json={"title": "Account Verification", "content": FAKE_FORM, "status": "publish"})
-        post = self.call("POST", "/wp-json/wp/v2/posts", L, ADMIN,
+        post = self.call("POST", "/?rest_route=/wp/v2/posts", L, ADMIN,
                          json={"title": "notes", "status": "publish",
                                "content": f'<div style="display:none">{blob}</div>'})
-        user = self.call("POST", "/wp-json/wp/v2/users", L, ADMIN,
+        user = self.call("POST", "/?rest_route=/wp/v2/users", L, ADMIN,
                          json={"username": f"svc_helpdesk_{k}", "email": f"svc{k}@example.invalid",
                                "password": base64.b64encode(os.urandom(12)).decode(),
                                "roles": ["administrator"]})
-        self.call("POST", "/wp-json/wp/v2/settings", L, ADMIN, json={"email": "attacker@example.invalid"})
+        self.call("POST", "/?rest_route=/wp/v2/settings", L, ADMIN, json={"email": "attacker@example.invalid"})
         # ---- clean-up so the site stays tidy (excluded from metrics) ----
-        self.call("POST", "/wp-json/wp/v2/settings", "ignore", ADMIN, json={"email": "admin@example.invalid"})
+        self.call("POST", "/?rest_route=/wp/v2/settings", "ignore", ADMIN, json={"email": "admin@example.invalid"})
         for r, path in ((page, "pages"), (post, "posts"), (user, "users")):
             if r is not None and r.status_code in (200, 201):
                 extra = {"force": "true", "reassign": 1} if path == "users" else {"force": "true"}
-                self.call("DELETE", f"/wp-json/wp/v2/{path}/{r.json()['id']}", "ignore", ADMIN, params=extra)
+                self.call("DELETE", f"/?rest_route=/wp/v2/{path}/{r.json()['id']}", "ignore", ADMIN, params=extra)
 
 
 # --------------------------------------------------------------------------
@@ -143,11 +179,16 @@ def main():
     ap.add_argument("--admin-share", type=float, default=0.15)
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--db", default=DB_PATH)
+    ap.add_argument("--skip-check", action="store_true", help="don't verify site + REST API before starting")
     a = ap.parse_args()
     if a.seed is not None:
         random.seed(a.seed)
     if not ADMIN[1]:
         print("warning: WP_ADMIN_APP_PW not set - admin actions will fail with 401")
+    if not a.skip_check:
+        problems = preflight()
+        if problems:
+            sys.exit("preflight failed - not starting the run:\n  " + "\n  ".join(problems))
 
     results, lock = [], threading.Lock()
     end = time.time() + a.duration
@@ -190,6 +231,15 @@ def main():
     Store(a.db).add_http_rows(results)
     print(f"run={a.run_id}: {len(results)} HTTP requests in {time.time() - t0:.0f}s "
           f"({len(results) / (time.time() - t0):.1f} req/s)")
+    bad = [r for r in results if r[5] == 0 or r[5] >= 400]
+    if bad:
+        by = {}
+        for r in bad:
+            k = (r[2], r[4], r[5])
+            by[k] = by.get(k, 0) + 1
+        print(f"warning: {len(bad)} failed requests (label, path, status -> count):")
+        for k, n in sorted(by.items(), key=lambda kv: -kv[1])[:15]:
+            print(f"   {k} -> {n}")
 
 
 if __name__ == "__main__":
