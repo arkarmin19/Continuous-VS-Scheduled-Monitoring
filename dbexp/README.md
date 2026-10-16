@@ -44,7 +44,10 @@ for cloud VM.
 SITE_URL=http://<vm-public-ip> bash setup_vm.sh
 ```
 For Local VM,
-scp local_path vboxuser@ip_address:
+```bash
+scp local_path/folder vboxuser@ip_address:
+setup_vm.sh
+```
 
 It prints the admin password and writes `/opt/dbexp/lab.env` (site URL + a REST application password for the workload generator).
 
