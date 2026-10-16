@@ -1,6 +1,6 @@
 # Continuous vs. scheduled database anomaly detection on WordPress
 
-A small lab kit for your study. One WordPress + MariaDB site, one Python detector, and the
+A small lab kit for research. One WordPress + MariaDB site, one Python detector, and the
 only thing that changes between conditions is **when the detector scores queries**.
 
 ```
@@ -35,13 +35,16 @@ only thing that changes between conditions is **when the detector scores queries
 
 ## 1. Provision
 
-1. Create a free-tier VM (Oracle Always Free ARM/AMD, GCP e2-micro, AWS t2/t3.micro), Ubuntu 22.04/24.04.
+1. Create a free-tier VM (Oracle Always Free ARM/AMD, GCP e2-micro, AWS t2/t3.micro) or install virtual machine, and Ubuntu 22.04/24.04.
 2. In the cloud firewall allow ports 22 and 80 **only from your own IP** (the lab plugin is injectable on purpose).
 3. Copy this folder to the VM and run:
 
+for cloud VM.
 ```bash
 SITE_URL=http://<vm-public-ip> bash setup_vm.sh
 ```
+For Local VM,
+scp local_path vboxuser@ip_address:
 
 It prints the admin password and writes `/opt/dbexp/lab.env` (site URL + a REST application password for the workload generator).
 
