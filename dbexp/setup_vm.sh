@@ -53,6 +53,38 @@ $WP user create editor1     editor1@example.invalid     --role=editor     --user
 $WP user create author1     author1@example.invalid     --role=author     --user_pass="${USERS_PASS}"
 $WP user create subscriber1 subscriber1@example.invalid --role=subscriber --user_pass="${USERS_PASS}"
 
+echo "==> URL rewriting (post-name permalinks and /wp-json/ REST addresses)"
+sudo a2enmod rewrite
+# Ubuntu's default config ignores .htaccess under /var/www; allow it for WordPress
+sudo tee /etc/apache2/conf-available/dbexp-wordpress.conf >/dev/null <<'CONF'
+<Directory /var/www/html>
+    AllowOverride All
+</Directory>
+CONF
+sudo a2enconf dbexp-wordpress
+$WP rewrite structure '/%postname%/'
+sudo tee "${WP_DIR}/.htaccess" >/dev/null <<'HTACCESS'
+# BEGIN WordPress
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
+HTACCESS
+sudo chown www-data:www-data "${WP_DIR}/.htaccess"
+sudo systemctl restart apache2
+
+# fail early if the REST API is still unreachable (this caused the 404s in the pilot round)
+code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/wp-json/)
+if [ "$code" != "200" ]; then
+  echo "ERROR: http://localhost/wp-json/ returned HTTP $code - URL rewriting is not working." >&2
+  exit 1
+fi
+
 echo "==> Directories, logger mu-plugin, vulnerable lab plugin"
 sudo install -d -o www-data -g www-data -m 0775 /var/log/dbexp
 sudo install -d -o "${ME}" -g "${ME}" /var/lib/dbexp /opt/dbexp
