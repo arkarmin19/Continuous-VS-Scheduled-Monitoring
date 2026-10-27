@@ -1,8 +1,7 @@
 # Continuous vs. scheduled database anomaly detection on WordPress
 
 Lab kit for the University BSc Computer Science thesis
-*Making Databases Safe: Preliminary Study of Comparing Continuous & Scheduled Anomaly Detection in Web CMS Environments*
-.
+*Making Databases Safe: Preliminary Study of Comparing Continuous & Scheduled Anomaly Detection in Web CMS Environments*.
 
 One WordPress + MariaDB site and one Python detector are used. Every condition uses the same
 baseline, scoring function, threshold, workload and attacks. The only difference between
