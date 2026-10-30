@@ -188,8 +188,8 @@ Logging overhead = `logonly` vs `none`. Detection overhead = `cont` / `sched-*` 
 
 | File | Contents |
 |---|---|
-| `results/20261009-0614/final_results.csv` | the 30 measured runs reported in the thesis (run IDs `20261009-0614-<condition>-s<seed>`) |
-| `results/20261009-0614/run_order.csv` | condition order of every trial |
+| `final_results.csv` | the 30 measured runs reported in the thesis (run IDs `20261009-0614-<condition>-s<seed>`) |
+| `run_order.csv` | condition order of every trial |
 | `pilot_results.csv` | earlier 10-run pilot (continuous and 60 s only). Its phishing-kit and admin REST requests got HTTP 404 because URL rewriting was not yet enabled, so they are **not** used in the thesis |
 | `smoke_test.csv` | first test runs, used only to check that the scripts and site work |
 
